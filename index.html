@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phone Light Show</title>
+<style>
+  :root { --bg:#14111f; --panel:#1e1a30; --text:#f3f0ff; --muted:#9d96b8; --accent:#ff3d8b; --ok:#3ddc97; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+  [hidden] { display:none !important; }
+  h1 { font-size:1.9rem; margin:0 0 .25rem; letter-spacing:-.01em; }
+  p { color:var(--muted); line-height:1.5; margin:.25rem 0 1rem; }
+  button { font:inherit; font-weight:700; border:0; border-radius:12px; padding:.9rem 1.4rem;
+    background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; border:1.5px solid var(--muted); color:var(--text); }
+  button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* Coordinator */
+  #coord { max-width:980px; margin:0 auto; padding:2rem 1.25rem 3rem; }
+  .grid { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; margin-top:1.5rem; }
+  @media (max-width:760px){ .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border-radius:16px; padding:1.25rem; }
+  .panel h2 { font-size:1.1rem; margin:0 0 .75rem; }
+  video { width:100%; max-height:240px; background:#000; border-radius:10px; margin-top:.75rem; }
+  #qr { background:#fff; padding:10px; border-radius:10px; display:inline-block; line-height:0; }
+  #link { word-break:break-all; font-size:.85rem; color:var(--muted); }
+  .count { font-size:2.6rem; font-weight:800; color:var(--ok); line-height:1; }
+  label { display:block; margin:.75rem 0 .25rem; }
+  input[type=range] { width:100%; }
+
+  /* Phone */
+  #phone { min-height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center;
+    text-align:center; padding:2rem 1.5rem; }
+  #phone button { font-size:1.2rem; padding:1.1rem 1.8rem; margin-top:1rem; }
+  #status { font-weight:700; }
+  #status.ok { color:var(--ok); }
+
+  .row { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.75rem; }
+  .row button { padding:.7rem 1rem; }
+  #previewBox { position:relative; aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; margin-top:.75rem; }
+  #previewBox:fullscreen { border-radius:0; aspect-ratio:auto; width:100%; height:100%; }
+  .qrs { display:flex; gap:1rem; flex-wrap:wrap; }
+  .linkbox { margin-top:.5rem; }
+  .linkbox b { display:block; margin-bottom:.15rem; }
+  .linkbox input { width:100%; background:#14111f; color:var(--text); border:1px solid #3a3358; border-radius:8px; padding:.45rem .6rem; font:inherit; font-size:.8rem; }
+  .linkbox button { margin-top:.3rem; padding:.45rem .8rem; font-size:.85rem; }
+  .champ { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .champ svg { height:92%; max-width:92%; filter:drop-shadow(0 0 24px rgba(246,216,106,.45)); }
+  #stage { position:fixed; inset:0; background:#000; z-index:10; }
+  #light { position:absolute; inset:0; opacity:0; background:#fff; }
+</style>
+</head>
+<body>
+
+<!-- COORDINATOR VIEW -->
+<main id="coord" hidden>
+  <h1>Phone Light Show</h1>
+  <p>Pick the song, let everyone scan the code, then press play. The sound comes from this computer; the phones flash and vibrate.</p>
+  <div class="grid">
+    <section class="panel">
+      <h2>Song</h2>
+      <input id="file" type="file" accept="audio/*,video/*">
+      <video id="media" controls playsinline></video>
+      <div class="row">
+        <button id="previewBtn" class="ghost">Preview the show here</button>
+        <button id="fsPreview" class="ghost" hidden>Fullscreen preview</button>
+        <button id="fsPage" class="ghost">Fullscreen</button>
+      </div>
+      <div id="previewBox" hidden><div id="pvLight" style="position:absolute;inset:0;opacity:0"></div><div id="pvChamp" class="champ"></div></div>
+      <label for="trim">Phone delay: <b id="trimVal">0</b> ms</label>
+      <input id="trim" type="range" min="-300" max="600" step="5" value="0">
+      <p>Raise it if the phones flash before you hear the beat (typical with Bluetooth speakers). Lower it if they flash late.</p>
+      <button id="test" class="ghost">Test flash and vibration</button>
+    </section>
+    <section class="panel">
+      <h2>Join the show</h2>
+      <div class="count" id="count">0</div>
+      <p>connected</p>
+      <div class="qrs">
+        <div><div id="qr"></div><p>Phones: light and vibration</p></div>
+        <div><div id="qr2"></div><p>Computers: light only</p></div>
+      </div>
+      <div class="linkbox"><b>Phone link</b><input id="link" readonly value="Starting…"><button id="copy1" class="ghost">Copy</button></div>
+      <div class="linkbox"><b>Computer link</b><input id="link2" readonly value="Starting…"><button id="copy2" class="ghost">Copy</button></div>
+    </section>
+  </div>
+</main>
+
+<!-- PHONE VIEW -->
+<main id="phone" hidden>
+  <h1 id="phoneTitle">Light show</h1>
+  <p id="status">Connecting…</p>
+  <p id="phoneHelp">Tap the button to go fullscreen and keep this screen on. Turn your volume down and leave the phone face up.</p>
+  <button id="go">Go fullscreen and start</button>
+</main>
+<div id="stage" hidden><div id="light"></div><div id="champ" class="champ"></div></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ================= CONFIG ================= */
+const CUES = [            // [start, end] in seconds of media time
+  [10.255, 12.385], [12.980, 14.935], [15.562, 17.519],
+  [18.145, 19.220], [19.433, 19.970], [20.715, 22.699],
+  [23.304, 25.260], [25.885, 27.840], [28.466, 29.745]
+];
+const FLASH_MS = 50;      // full brightness
+const FADE_MS  = 1950;    // then fade out
+const FADE_CURVE = 1.5;   // 1 = linear, higher = faster drop at first
+const HUES = [330, 190, 50, 280, 130, 10, 210, 90, 310]; // one colour per cue
+
+/* Beat grid measured from the song: kick drum at 75 BPM, steady the whole way through */
+const BEAT_START = 12.907;   // first beat (s)
+const BEAT_PERIOD = 0.8;     // seconds per beat
+const BEAT_END = 176.5;      // last beat (s)
+const BEAT_FLASH_MS = 40;    // full brightness on each beat
+const BEAT_FADE_MS = 520;    // then fade out
+const BAR_BEATS = 4;         // every 4th beat is a stronger "downbeat"
+const CUE_LIGHT = true;      // keep the big 50/1950 ms flash on your timestamps as an underlay
+const CHAMPAGNE_AT = CUES[0][0]; // champagne scene starts with the first timestamp
+const CHAMPAGNE_LEN = 4.2;       // seconds the scene stays on screen
+/* ========================================== */
+
+const $ = id => document.getElementById(id);
+const room = new URLSearchParams(location.search).get('room');
+
+/* Brightness 0..1 at `ms` after a cue starts */
+function envelope(ms) {
+  if (ms < 0) return 0;
+  if (ms < FLASH_MS) return 1;
+  if (ms < FLASH_MS + FADE_MS) return Math.pow(1 - (ms - FLASH_MS) / FADE_MS, FADE_CURVE);
+  return 0;
+}
+/* Latest cue that has started wins, so a new cue cancels the previous fade */
+function cueLightAt(t) {
+  let idx = -1;
+  for (let i = 0; i < CUES.length; i++) if (t >= CUES[i][0]) idx = i;
+  if (idx < 0) return { o: 0, hue: 0 };
+  return { o: envelope((t - CUES[idx][0]) * 1000), hue: HUES[idx % HUES.length] };
+}
+/* Beat flash: latest beat wins. Downbeats are brighter and change colour. */
+function beatLightAt(t) {
+  if (t < BEAT_START - 0.02 || t > BEAT_END + BEAT_PERIOD) return { o: 0, hue: 0 };
+  const n = Math.floor((t - BEAT_START) / BEAT_PERIOD + 1e-9);
+  const ms = (t - BEAT_START - n * BEAT_PERIOD) * 1000;
+  let o = 0;
+  if (ms < BEAT_FLASH_MS) o = 1;
+  else if (ms < BEAT_FLASH_MS + BEAT_FADE_MS) o = Math.pow(1 - (ms - BEAT_FLASH_MS) / BEAT_FADE_MS, 1.6);
+  const down = n % BAR_BEATS === 0;
+  const bar = Math.floor(n / BAR_BEATS);
+  return { o: down ? o : o * 0.7, hue: (bar * 47 + 200) % 360, down };
+}
+/* Combined light: beats on top of the cue flash, whichever is brighter */
+function lightAt(t) {
+  const b = beatLightAt(t);
+  const c = CUE_LIGHT ? cueLightAt(t) : { o: 0, hue: 0 };
+  return b.o >= c.o ? b : c;
+}
+/* Champagne scene progress in seconds since the first timestamp, or -1 when off */
+function champagneAt(t) {
+  const e = t - CHAMPAGNE_AT;
+  return (e >= 0 && e < CHAMPAGNE_LEN) ? e : -1;
+}
+const BOTTLE_SVG = `
+<svg id="bottleSvg" viewBox="0 0 400 600" aria-hidden="true">
+  <g id="bottleG" transform="translate(200 330) rotate(38) translate(-200 -330)">
+    <rect x="165" y="150" width="70" height="330" rx="22" fill="#0f3d2e"/>
+    <path d="M178 40 h44 v110 q0 20 20 40 h-84 q20 -20 20 -40z" fill="#0f3d2e"/>
+    <rect x="172" y="38" width="56" height="26" rx="5" fill="#d9b44a"/>
+    <rect x="165" y="280" width="70" height="120" fill="#f1e3a6"/>
+    <rect x="165" y="410" width="70" height="40" fill="#d9b44a" opacity=".9"/>
+    <rect x="176" y="170" width="10" height="260" rx="5" fill="#fff" opacity=".18"/>
+    <g id="foam"></g>
+  </g>
+  <g id="cap"><ellipse cx="200" cy="34" rx="30" ry="11" fill="#d9b44a"/><rect x="172" y="30" width="56" height="12" rx="4" fill="#b8932f"/></g>
+  <g id="stream"></g>
+  <g id="glass"><path d="M270 470 h110 l-14 80 q-2 14 -16 14 h-50 q-14 0 -16 -14z" fill="#fff" opacity=".12" stroke="#fff" stroke-opacity=".5" stroke-width="3"/><rect id="fill" x="280" y="560" width="90" height="0" fill="#f6d86a" opacity=".9"/></g>
+</svg>`;
+function drawChampagne(root, e) {
+  const sv = root.querySelector('#bottleSvg');
+  if (!sv) return;
+  const cap = sv.querySelector('#cap'), foam = sv.querySelector('#foam'),
+        stream = sv.querySelector('#stream'), fill = sv.querySelector('#fill');
+  // Cap: pops at 0.15 s and flies up and to the left, spinning
+  const c = Math.max(0, e - 0.15);
+  const dy = -720 * c + 900 * c * c;
+  cap.setAttribute('transform', 'translate(' + (178 + 300 * c) + ' ' + (67 + dy) + ') rotate(' + (38 + c * 900) + ' 200 34)');
+  cap.style.opacity = dy > 250 ? 0 : 1;
+  // Foam burst from the neck
+  let f = '';
+  if (e > 0.15 && e < 1.6) {
+    const k = (e - 0.15) / 1.45;
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI - Math.PI, r = 12 + 55 * k * (0.6 + (i % 3) * 0.25);
+      f += '<circle cx="' + (200 + Math.cos(a) * r) + '" cy="' + (40 + Math.sin(a) * r) +
+           '" r="' + (9 * (1 - k * 0.6)) + '" fill="#fff" opacity="' + (0.9 - k * 0.7) + '"/>';
+    }
+  }
+  foam.innerHTML = f;
+  // Liquid stream from the tilted neck into the glass, starts at 0.5 s
+  const s0 = e - 0.5;
+  const p = Math.max(0, Math.min(1, s0 / 0.6));
+  stream.innerHTML = s0 > 0
+    ? '<path d="M384 106 Q ' + (404 + p * 6) + ' ' + (106 + p * 150) + ' ' + (330 + 0) + ' ' + (106 + p * 360) +
+      '" stroke="#f6d86a" stroke-width="7" fill="none" stroke-linecap="round" opacity=".92"/>'
+    : '';
+  const lvl = Math.max(0, Math.min(1, (e - 1.0) / 3)) * 85;
+  fill.setAttribute('y', 564 - lvl); fill.setAttribute('height', lvl);
+}
+function renderChampagne(layer, e) {
+  if (e < 0) { if (layer.firstChild) layer.innerHTML = ''; return; }
+  if (!layer.firstChild) layer.innerHTML = BOTTLE_SVG;
+  drawChampagne(layer, e);
+  const fade = e > CHAMPAGNE_LEN - 0.5 ? (CHAMPAGNE_LEN - e) / 0.5 : 1;
+  layer.style.opacity = Math.max(0, Math.min(1, fade));
+}
+function vibeAt(t) {
+  for (let i = 0; i < CUES.length; i++) if (t >= CUES[i][0] && t < CUES[i][1]) return i;
+  return -1;
+}
+
+if (room) startPhone(room); else startCoordinator();
+
+/* ================= COORDINATOR ================= */
+function startCoordinator() {
+  $('coord').hidden = false;
+  const media = $('media');
+  const conns = new Set();
+  let peer;
+
+  $('file').onchange = e => {
+    const f = e.target.files[0];
+    if (f) media.src = URL.createObjectURL(f);
+  };
+
+  const state = () => ({
+    t: 'state',
+    playing: !media.paused && !media.ended,
+    mt: media.currentTime,
+    rate: media.playbackRate,
+    at: performance.now(),
+    trim: +$('trim').value
+  });
+  const broadcast = m => conns.forEach(c => c.open && c.send(m));
+  const updateCount = () => $('count').textContent = [...conns].filter(c => c.open).length;
+
+  ['play','playing','pause','seeked','ratechange','ended'].forEach(ev =>
+    media.addEventListener(ev, () => broadcast(state())));
+  setInterval(() => broadcast(state()), 1000);   // heartbeat keeps phones in sync
+
+  $('trim').oninput = () => { $('trimVal').textContent = $('trim').value; broadcast(state()); };
+  $('test').onclick = () => { broadcast({ t: 'test' }); window.__pvTest = performance.now(); };
+
+  /* Copy buttons */
+  [['copy1','link'],['copy2','link2']].forEach(([b,i]) => $(b).onclick = async () => {
+    try { await navigator.clipboard.writeText($(i).value); } catch (e) { $(i).select(); document.execCommand('copy'); }
+    $(b).textContent = 'Copied'; setTimeout(() => $(b).textContent = 'Copy', 1500);
+  });
+
+  /* Fullscreen for the coordinator page and for the preview */
+  $('fsPage').onclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+  };
+  $('fsPreview').onclick = () => $('previewBox').requestFullscreen && $('previewBox').requestFullscreen();
+  $('previewBtn').onclick = () => {
+    const box = $('previewBox'), on = box.hidden;
+    box.hidden = !on; $('fsPreview').hidden = !on;
+    $('previewBtn').textContent = on ? 'Hide preview' : 'Preview the show here';
+  };
+  /* The preview draws exactly what a phone draws, from this player's own clock */
+  (function pv() {
+    const box = $('previewBox');
+    if (!box.hidden) {
+      const playing = !media.paused && !media.ended;
+      const t = media.currentTime - (+$('trim').value) / 1000;
+      let o = 0, hue = 0;
+      if (playing) { const l = lightAt(t); o = l.o; hue = l.hue; }
+      const te = envelope(performance.now() - (window.__pvTest || -1e9));
+      if (te > 0) { o = te; hue = 200; }
+      $('pvLight').style.opacity = o;
+      $('pvLight').style.background = 'hsl(' + hue + ' 100% 55%)';
+      renderChampagne($('pvChamp'), playing ? champagneAt(t) : -1);
+    }
+    requestAnimationFrame(pv);
+  })();
+
+  function makePeer(id) {
+    peer = new Peer(id);
+    peer.on('open', pid => {
+      try { localStorage.setItem('lightshow-id', pid); } catch (e) {}
+      const base = location.origin + location.pathname + '?room=' + encodeURIComponent(pid);
+      const link = base, link2 = base + '&view=screen';
+      $('link').value = link; $('link2').value = link2;
+      $('qr').innerHTML = ''; $('qr2').innerHTML = '';
+      new QRCode($('qr'), { text: link, width: 150, height: 150 });
+      new QRCode($('qr2'), { text: link2, width: 150, height: 150 });
+    });
+    peer.on('error', err => {
+      if (err.type === 'unavailable-id') makePeer(undefined);  // saved id is taken: get a fresh one
+      else $('link').value = 'Connection problem: ' + err.type + '. Reload the page.';
+    });
+    peer.on('connection', c => {
+      conns.add(c);
+      c.on('open', () => { updateCount(); c.send(state()); });
+      c.on('data', d => {
+        if (d && d.t === 'ping') c.send({ t: 'pong', c0: d.c0, s: performance.now() });
+      });
+      const drop = () => { conns.delete(c); updateCount(); };
+      c.on('close', drop); c.on('error', drop);
+    });
+  }
+  let saved = null;
+  try { saved = localStorage.getItem('lightshow-id'); } catch (e) {}
+  makePeer(saved || undefined);
+}
+
+/* ================= PHONE ================= */
+function startPhone(roomId) {
+  $('phone').hidden = false;
+  const light = $('light');
+  const isScreen = new URLSearchParams(location.search).get('view') === 'screen';
+  if (isScreen) {
+    $('phoneTitle').textContent = 'Light show screen';
+    $('phoneHelp').textContent = 'This computer shows the light only. Click the button to go fullscreen.';
+  }
+  let conn = null, st = null, offset = 0, samples = [], testAt = -1e9, lastVibe = -1, wake = null;
+
+  const setStatus = (txt, ok) => { $('status').textContent = txt; $('status').className = ok ? 'ok' : ''; };
+
+  const peer = new Peer();
+  peer.on('open', connect);
+  peer.on('error', () => { setStatus('Looking for the show…'); setTimeout(connect, 2000); });
+
+  function connect() {
+    if (conn && conn.open) return;
+    conn = peer.connect(roomId, { serialization: 'json', reliable: true });
+    conn.on('open', () => { samples = []; setStatus('Connected. Waiting for the music.', true); burstPings(); });
+    conn.on('data', onData);
+    const lost = () => { setStatus('Connection lost. Retrying…'); st = null; setTimeout(connect, 2000); };
+    conn.on('close', lost); conn.on('error', lost);
+  }
+
+  /* Clock sync: offset = coordinator clock minus local clock, from the lowest-latency recent sample */
+  function ping() { if (conn && conn.open) conn.send({ t: 'ping', c0: performance.now() }); }
+  function burstPings() { for (let i = 0; i < 10; i++) setTimeout(ping, i * 150); }
+  setInterval(ping, 2000);
+
+  function onData(d) {
+    if (d.t === 'pong') {
+      const now = performance.now(), rtt = now - d.c0;
+      samples.push({ rtt, off: d.s + rtt / 2 - now });
+      if (samples.length > 12) samples.shift();
+      offset = samples.reduce((a, b) => (b.rtt < a.rtt ? b : a)).off;
+      const best = Math.min(...samples.map(s => s.rtt));
+      if (!st || !st.playing) setStatus('Connected · latency ' + Math.round(best) + ' ms', true);
+    } else if (d.t === 'state') st = d;
+    else if (d.t === 'test') { testAt = performance.now(); doVibrate(300); }
+  }
+
+  function mediaNow() {
+    if (!st) return -1;
+    let t = st.mt;
+    if (st.playing) t += (performance.now() + offset - st.at) / 1000 * st.rate;
+    return t - st.trim / 1000;
+  }
+  function doVibrate(p) { if (isScreen) return; try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
+
+  function frame() {
+    const t = mediaNow(), playing = !!(st && st.playing);
+    let o = 0, hue = 0;
+    if (playing) { const l = lightAt(t); o = l.o; hue = l.hue; }
+
+    const vi = playing ? vibeAt(t) : -1;
+    if (vi !== lastVibe) {
+      if (vi >= 0) doVibrate(Math.max(1, Math.round((CUES[vi][1] - t) * 1000)));
+      else doVibrate(0);
+      lastVibe = vi;
+    }
+
+    const te = envelope(performance.now() - testAt);   // test flash overrides
+    if (te > 0) { o = te; hue = 200; }
+
+    light.style.opacity = o;
+    light.style.background = 'hsl(' + hue + ' 100% 55%)';
+    renderChampagne($('champ'), playing ? champagneAt(t) : -1);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* Start button: the user gesture that unlocks fullscreen and vibration */
+  $('go').onclick = async () => {
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch (e) {}
+    doVibrate(30);                       // unlock vibration
+    try { wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    $('phone').hidden = true;
+    $('stage').hidden = false;
+  };
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && !$('stage').hidden) {
+      $('stage').hidden = true; $('phone').hidden = false; doVibrate(0);
+    }
+  });
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !$('stage').hidden) {
+      try { wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
+  });
+}
+</script>
+</body>
+</html>
